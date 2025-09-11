@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabase'
+import { db } from '../../lib/supabase'
 
 export default async function handler(req, res) {
   // Obsługa CORS
@@ -12,20 +12,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('active', true)
-
-      if (error) {
-        console.error('Supabase error:', error)
-        return res.status(500).json({ 
-          error: 'Database error', 
-          details: error.message 
-        })
-      }
-
-      return res.status(200).json(data)
+      const products = await db.getProducts()
+      return res.status(200).json(products)
     } catch (error) {
       console.error('API error:', error)
       return res.status(500).json({ 
