@@ -76,25 +76,48 @@ export default function Summary() {
     setLoading(true);
     
     try {
-      // Tutaj będzie integracja z prawdziwą płatnością (Stripe)
-      // Na razie symulujemy płatność
-      
-      const orderData = {
-        user: user,
+      // Zapisz zamówienie do API
+      const orderResponse = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user: user,
+          items: cart,
+          totalAmount: getTotalAmount()
+        })
+      });
+
+      let orderData = null;
+      if (orderResponse.ok) {
+        const result = await orderResponse.json();
+        orderData = result.order;
+      }
+
+      // Zapisz zamówienie lokalnie jako backup
+      const localOrder = orderData || {
+        id: Date.now(),
+        orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        userId: user.id,
         items: cart,
         totalAmount: getTotalAmount(),
-        timestamp: new Date().toISOString()
+        status: 'paid',
+        createdAt: new Date().toISOString()
       };
 
+      // Dodaj do localStorage
+      const existingOrders = JSON.parse(localStorage.getItem('userOrders') || '[]');
+      existingOrders.push(localOrder);
+      localStorage.setItem('userOrders', JSON.stringify(existingOrders));
+      
       // Symulacja opóźnienia płatności
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Wyczyść koszyk po udanej płatności
       localStorage.removeItem('cart');
       
-      // Przekieruj do strony podziękowania lub głównej
-      alert(`Płatność zakończona sukcesem!\n\nKwota: ${getTotalAmount().toFixed(2)} zł\nZamówienie zostało złożone.`);
-      router.push('/');
+      // Przekieruj do historii zamówień
+      alert(`Płatność zakończona sukcesem!\n\nNumer zamówienia: ${localOrder.orderNumber}\nKwota: ${getTotalAmount().toFixed(2)} zł\n\nZamówienie zostało zapisane w historii.`);
+      router.push('/orders');
       
     } catch (error) {
       alert('Błąd podczas płatności. Spróbuj ponownie.');

@@ -151,6 +151,12 @@ export default function Home() {
           
           {user ? (
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => router.push('/orders')}
+                className="text-gray-600 hover:text-gray-800 text-sm"
+              >
+                📋 Moje zamówienia
+              </button>
               <span className="text-gray-600">
                 Witaj, {user.firstName}!
               </span>
