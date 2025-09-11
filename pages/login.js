@@ -11,8 +11,8 @@ export default function Login() {
   const handleTestLogin = () => {
     const testUser = {
       id: 1,
-      firstName: 'Jan',
-      lastName: 'Kowalski',
+      first_name: 'Jan',
+      last_name: 'Kowalski',
       phone: '+48123456789',
       email: 'jan@test.pl'
     };
@@ -20,8 +20,15 @@ export default function Login() {
     localStorage.setItem('user', JSON.stringify(testUser));
     localStorage.setItem('token', 'test_token');
     
-    // Przekieruj z powrotem lub do summary
-    router.push('/');
+    // Sprawdź czy ma wrócić do checkout
+    const returnTo = router.query.returnTo;
+    const cart = localStorage.getItem('cart');
+    
+    if (returnTo === 'summary' && cart && JSON.parse(cart).length > 0) {
+      router.push('/summary');
+    } else {
+      router.push('/');
+    }
   };
 
   const handleLogin = async (e) => {
@@ -45,8 +52,17 @@ export default function Login() {
 
       if (response.ok && data.success) {
         localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('token', data.token);
-        router.push('/');
+        localStorage.setItem('token', data.token || 'authenticated');
+        
+        // Sprawdź czy ma wrócić do checkout
+        const returnTo = router.query.returnTo;
+        const cart = localStorage.getItem('cart');
+        
+        if (returnTo === 'summary' && cart && JSON.parse(cart).length > 0) {
+          router.push('/summary');
+        } else {
+          router.push('/');
+        }
       } else {
         setError(data.error || 'Nie znaleziono użytkownika');
       }
