@@ -15,7 +15,7 @@
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
     "mysql2": "^3.6.0",
-    "twilio": "^4.15.0"
+    "twilio": "^4.15.0",
     "@supabase/supabase-js": "^2.38.4"
   },
   "devDependencies": {
