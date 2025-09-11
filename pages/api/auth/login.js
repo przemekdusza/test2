@@ -1,88 +1,75 @@
-// pages/api/auth/login.js - używa Supabase
-import { db } from '../../../lib/supabase'
+import { supabase } from '../../../lib/supabase'
 
 export default async function handler(req, res) {
+  // Obsługa CORS
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+
   if (req.method === 'POST') {
-    const { phone } = req.body
-
-    if (!phone) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Brak numeru telefonu' 
-      })
-    }
-
     try {
-      // Sprawdź czy użytkownik istnieje w bazie Supabase
-      const user = await db.getUserByPhone(phone)
+      const { phone, first_name, last_name, email, address } = req.body
 
-      if (user) {
-        // Wygeneruj prosty token
-        const token = `token_${user.id}_${Date.now()}`
-        
-        res.status(200).json({
-          success: true,
-          token,
-          user: {
-            id: user.id,
-            firstName: user.first_name,
-            lastName: user.last_name,
-            phone: user.phone,
-            email: user.email
-          }
+      if (!phone) {
+        return res.status(400).json({ error: 'Phone number is required' })
+      }
+
+      // Sprawdź czy użytkownik już istnieje
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Database check error:', checkError)
+        return res.status(500).json({ error: 'Database error' })
+      }
+
+      if (existingUser) {
+        // Użytkownik istnieje, zwróć jego dane
+        return res.status(200).json({ 
+          success: true, 
+          user: existingUser,
+          message: 'User logged in successfully'
         })
       } else {
-        res.status(404).json({
-          success: false,
-          error: 'Nie znaleziono użytkownika z tym numerem telefonu'
+        // Nowy użytkownik, stwórz konto
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert([{ 
+            phone, 
+            first_name, 
+            last_name, 
+            email, 
+            address 
+          }])
+          .select()
+          .single()
+
+        if (createError) {
+          console.error('User creation error:', createError)
+          return res.status(500).json({ error: 'Failed to create user' })
+        }
+
+        return res.status(201).json({ 
+          success: true, 
+          user: newUser,
+          message: 'User registered successfully'
         })
       }
     } catch (error) {
-      console.error('Błąd logowania:', error)
-      
-      // Fallback - symulacja użytkowników jeśli baza nie działa
-      const fallbackUsers = [
-        {
-          id: 1,
-          first_name: 'Anna',
-          last_name: 'Kowalska',
-          phone: '+48123456789',
-          email: 'anna@example.com'
-        },
-        {
-          id: 2,
-          first_name: 'Piotr',
-          last_name: 'Nowak',
-          phone: '+48987654321',
-          email: 'piotr@example.com'
-        }
-      ]
-
-      const fallbackUser = fallbackUsers.find(u => u.phone === phone)
-
-      if (fallbackUser) {
-        const token = `fallback_token_${fallbackUser.id}_${Date.now()}`
-        
-        res.status(200).json({
-          success: true,
-          token,
-          user: {
-            id: fallbackUser.id,
-            firstName: fallbackUser.first_name,
-            lastName: fallbackUser.last_name,
-            phone: fallbackUser.phone,
-            email: fallbackUser.email
-          }
-        })
-      } else {
-        res.status(404).json({
-          success: false,
-          error: 'Nie znaleziono użytkownika z tym numerem telefonu'
-        })
-      }
+      console.error('Login API error:', error)
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        details: error.message 
+      })
     }
-  } else {
-    res.setHeader('Allow', ['POST'])
-    res.status(405).end(`Method ${req.method} Not Allowed`)
   }
+
+  return res.status(405).json({ error: 'Method not allowed' })
 }
