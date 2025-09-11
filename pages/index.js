@@ -113,7 +113,7 @@ export default function Home() {
     if (user) {
       router.push('/summary');
     } else {
-      router.push('/login');
+      router.push('/login?returnTo=summary');
     }
   };
 
