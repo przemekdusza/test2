@@ -1,58 +1,88 @@
-// pages/api/auth/login.js
-export default function handler(req, res) {
+// pages/api/auth/login.js - używa Supabase
+import { db } from '../../../lib/supabase'
+
+export default async function handler(req, res) {
   if (req.method === 'POST') {
-    const { phone } = req.body;
+    const { phone } = req.body
 
     if (!phone) {
       return res.status(400).json({ 
         success: false, 
         error: 'Brak numeru telefonu' 
-      });
+      })
     }
 
-    // Symulacja użytkowników w bazie
-    const users = [
-      {
-        id: 1,
-        firstName: 'Anna',
-        lastName: 'Kowalska',
-        phone: '+48123456789',
-        email: 'anna@example.com'
-      },
-      {
-        id: 2,
-        firstName: 'Piotr',
-        lastName: 'Nowak',
-        phone: '+48987654321',
-        email: 'piotr@example.com'
+    try {
+      // Sprawdź czy użytkownik istnieje w bazie Supabase
+      const user = await db.getUserByPhone(phone)
+
+      if (user) {
+        // Wygeneruj prosty token
+        const token = `token_${user.id}_${Date.now()}`
+        
+        res.status(200).json({
+          success: true,
+          token,
+          user: {
+            id: user.id,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            phone: user.phone,
+            email: user.email
+          }
+        })
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Nie znaleziono użytkownika z tym numerem telefonu'
+        })
       }
-    ];
-
-    const user = users.find(u => u.phone === phone);
-
-    if (user) {
-      // Wygeneruj prosty token
-      const token = `token_${user.id}_${Date.now()}`;
+    } catch (error) {
+      console.error('Błąd logowania:', error)
       
-      res.status(200).json({
-        success: true,
-        token,
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          phone: user.phone,
-          email: user.email
+      // Fallback - symulacja użytkowników jeśli baza nie działa
+      const fallbackUsers = [
+        {
+          id: 1,
+          first_name: 'Anna',
+          last_name: 'Kowalska',
+          phone: '+48123456789',
+          email: 'anna@example.com'
+        },
+        {
+          id: 2,
+          first_name: 'Piotr',
+          last_name: 'Nowak',
+          phone: '+48987654321',
+          email: 'piotr@example.com'
         }
-      });
-    } else {
-      res.status(404).json({
-        success: false,
-        error: 'Nie znaleziono użytkownika z tym numerem telefonu'
-      });
+      ]
+
+      const fallbackUser = fallbackUsers.find(u => u.phone === phone)
+
+      if (fallbackUser) {
+        const token = `fallback_token_${fallbackUser.id}_${Date.now()}`
+        
+        res.status(200).json({
+          success: true,
+          token,
+          user: {
+            id: fallbackUser.id,
+            firstName: fallbackUser.first_name,
+            lastName: fallbackUser.last_name,
+            phone: fallbackUser.phone,
+            email: fallbackUser.email
+          }
+        })
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Nie znaleziono użytkownika z tym numerem telefonu'
+        })
+      }
     }
   } else {
-    res.setHeader('Allow', ['POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+    res.setHeader('Allow', ['POST'])
+    res.status(405).end(`Method ${req.method} Not Allowed`)
   }
 }
