@@ -158,7 +158,7 @@ export default function Home() {
                 📋 Moje zamówienia
               </button>
               <span className="text-gray-600">
-                Witaj, {user.firstName}!
+                Witaj, {user.first_name}!
               </span>
               <button
                 onClick={logout}
