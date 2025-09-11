@@ -8,6 +8,7 @@ export default function Register() {
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isExistingUser, setIsExistingUser] = useState(false);
   const router = useRouter();
 
   // Dane użytkownika
@@ -28,16 +29,57 @@ export default function Register() {
       city: '',
       street: '',
       houseNumber: ''
-    },
-    email: ''
+    }
   });
 
-  // Krok 1: Wysłanie SMS
+  // Walidacja polskiego numeru komórkowego
+  const validatePolishMobile = (number) => {
+    const cleaned = number.replace(/\s/g, '');
+    
+    // Sprawdź długość
+    if (cleaned.length !== 9) {
+      return false;
+    }
+    
+    // Sprawdź czy wszystkie znaki to cyfry
+    if (!/^\d{9}$/.test(cleaned)) {
+      return false;
+    }
+    
+    // Polskie prefiksy komórkowe
+    const mobilePrefix = cleaned.substring(0, 3);
+    const validPrefixes = [
+      '500', '501', '502', '503', '504', '505', '506', '507', '508', '509',
+      '510', '511', '512', '513', '514', '515', '516', '517', '518', '519',
+      '520', '521', '522', '523', '524', '525', '526', '527', '528', '529',
+      '530', '531', '532', '533', '534', '535', '536', '537', '538', '539',
+      '570', '571', '572', '573', '574', '575', '576', '577', '578', '579',
+      '600', '601', '602', '603', '604', '605', '606', '607', '608', '609',
+      '660', '661', '662', '663', '664', '665', '666', '667', '668', '669',
+      '690', '691', '692', '693', '694', '695', '696', '697', '698', '699',
+      '720', '721', '722', '723', '724', '725', '726', '727', '728', '729',
+      '730', '731', '732', '733', '734', '735', '736', '737', '738', '739',
+      '780', '781', '782', '783', '784', '785', '786', '787', '788', '789',
+      '790', '791', '792', '793', '794', '795', '796', '797', '798', '799',
+      '880', '881', '882', '883', '884', '885', '886', '887', '888', '889'
+    ];
+    
+    return validPrefixes.includes(mobilePrefix);
+  };
+
+  // Krok 1: Sprawdzenie użytkownika i wysłanie SMS
   const handleSendSMS = async (e) => {
     e.preventDefault();
     
-    if (!phone.trim() || phone.length < 9) {
-      setError('Wprowadź prawidłowy numer telefonu');
+    const cleanedPhone = phone.replace(/\s/g, '');
+    
+    if (!cleanedPhone || cleanedPhone.length !== 9) {
+      setError('Numer telefonu musi mieć dokładnie 9 cyfr');
+      return;
+    }
+
+    if (!validatePolishMobile(cleanedPhone)) {
+      setError('Wprowadź prawidłowy polski numer komórkowy');
       return;
     }
 
@@ -45,25 +87,51 @@ export default function Register() {
     setError('');
 
     try {
-      const fullPhone = `+48${phone.replace(/\s/g, '')}`;
+      const fullPhone = `+48${cleanedPhone}`;
       
-      // TODO: Integracja z Twilio
-      const response = await fetch('/api/auth/send-sms', {
+      // Sprawdź czy użytkownik już istnieje
+      const checkResponse = await fetch('/api/auth/check-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: fullPhone })
       });
 
-      const data = await response.json();
+      const checkData = await checkResponse.json();
 
-      if (response.ok && data.success) {
-        setStep(2);
+      if (checkData.exists) {
+        // Użytkownik istnieje - wyślij SMS do logowania
+        setIsExistingUser(true);
+        
+        const smsResponse = await fetch('/api/auth/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: fullPhone, type: 'login' })
+        });
+
+        if (smsResponse.ok) {
+          setStep(2);
+        } else {
+          setError('Błąd wysyłania kodu autoryzacyjnego');
+        }
       } else {
-        setError(data.error || 'Błąd wysyłania SMS');
+        // Nowy użytkownik - wyślij SMS do rejestracji
+        setIsExistingUser(false);
+        
+        const smsResponse = await fetch('/api/auth/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: fullPhone, type: 'register' })
+        });
+
+        if (smsResponse.ok) {
+          setStep(2);
+        } else {
+          setError('Błąd wysyłania kodu weryfikacyjnego');
+        }
       }
     } catch (error) {
       // Tymczasowo - bez Twilio
-      console.log('SMS would be sent to:', `+48${phone}`);
+      console.log('SMS would be sent to:', `+48${cleanedPhone}`);
       setStep(2);
       setError('');
     } finally {
@@ -84,13 +152,46 @@ export default function Register() {
     setError('');
 
     try {
-      // TODO: Weryfikacja z Twilio
-      // Tymczasowo akceptuj kod "1234"
-      if (verificationCode === '1234') {
-        setStep(3);
-        setError('');
+      const fullPhone = `+48${phone.replace(/\s/g, '')}`;
+
+      if (isExistingUser) {
+        // Logowanie istniejącego użytkownika
+        const response = await fetch('/api/auth/verify-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            phone: fullPhone, 
+            code: verificationCode 
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('token', data.token || 'authenticated');
+          
+          // Przekieruj do checkout lub strony głównej
+          const returnTo = router.query.returnTo;
+          const cart = localStorage.getItem('cart');
+          
+          if (returnTo === 'summary' && cart && JSON.parse(cart).length > 0) {
+            router.push('/summary');
+          } else {
+            router.push('/');
+          }
+        } else {
+          setError('Nieprawidłowy kod autoryzacyjny');
+        }
       } else {
-        setError('Nieprawidłowy kod weryfikacyjny. Użyj: 1234');
+        // Weryfikacja dla nowego użytkownika
+        // Tymczasowo akceptuj kod "1234"
+        if (verificationCode === '1234') {
+          setStep(3);
+          setError('');
+        } else {
+          setError('Nieprawidłowy kod weryfikacyjny. Użyj: 1234');
+        }
       }
     } catch (error) {
       setError('Błąd weryfikacji kodu');
@@ -137,7 +238,6 @@ export default function Register() {
         phone: fullPhone,
         first_name: userData.firstName,
         last_name: userData.lastName,
-        email: userData.email,
         customer_type: userData.customerType,
         company_name: userData.customerType === 'business' ? userData.companyName : null,
         billing_address: userData.billingAddress,
@@ -179,17 +279,15 @@ export default function Register() {
 
   const formatPhoneNumber = (value) => {
     const cleaned = value.replace(/\D/g, '');
-    const match = cleaned.match(/^(\d{3})(\d{3})(\d{3})$/);
-    if (match) {
-      return `${match[1]} ${match[2]} ${match[3]}`;
-    }
-    return cleaned;
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)}`;
   };
 
   const handlePhoneChange = (e) => {
-    const formatted = formatPhoneNumber(e.target.value);
-    if (formatted.replace(/\s/g, '').length <= 9) {
-      setPhone(formatted);
+    const cleaned = e.target.value.replace(/\D/g, '');
+    if (cleaned.length <= 9) {
+      setPhone(formatPhoneNumber(cleaned));
     }
   };
 
@@ -211,26 +309,28 @@ export default function Register() {
   };
 
   return (
-    <Layout title="Rejestracja - Sklep z Ręcznikami">
+    <Layout title={isExistingUser ? "Logowanie - Sklep z Ręcznikami" : "Rejestracja - Sklep z Ręcznikami"}>
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
           
-          {/* Progress indicator */}
-          <div className="flex justify-center mb-8">
-            <div className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                1
-              </div>
-              <div className={`w-8 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <div className={`w-8 h-1 ${step >= 3 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                3
+          {/* Progress indicator - tylko dla nowych użytkowników */}
+          {!isExistingUser && (
+            <div className="flex justify-center mb-8">
+              <div className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+                  1
+                </div>
+                <div className={`w-8 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+                  2
+                </div>
+                <div className={`w-8 h-1 ${step >= 3 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+                  3
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
@@ -242,7 +342,9 @@ export default function Register() {
           {step === 1 && (
             <div>
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-800">Rejestracja</h1>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {isExistingUser ? 'Logowanie' : 'Rejestracja'}
+                </h1>
                 <p className="text-gray-600 mt-2">Wprowadź numer telefonu</p>
               </div>
 
@@ -264,6 +366,9 @@ export default function Register() {
                       disabled={loading}
                     />
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tylko polskie numery komórkowe (9 cyfr)
+                  </p>
                 </div>
 
                 <button
@@ -271,7 +376,7 @@ export default function Register() {
                   disabled={loading}
                   className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
-                  {loading ? 'Wysyłanie...' : 'Wyślij kod SMS'}
+                  {loading ? 'Sprawdzanie...' : 'Wyślij kod SMS'}
                 </button>
               </form>
             </div>
@@ -281,9 +386,14 @@ export default function Register() {
           {step === 2 && (
             <div>
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-800">Weryfikacja</h1>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {isExistingUser ? 'Logowanie' : 'Weryfikacja'}
+                </h1>
                 <p className="text-gray-600 mt-2">
-                  Kod wysłano na +48 {phone}
+                  {isExistingUser 
+                    ? `Kod autoryzacyjny wysłano na +48 ${phone}`
+                    : `Kod weryfikacyjny wysłano na +48 ${phone}`
+                  }
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
                   (Tymczasowo użyj kodu: 1234)
@@ -293,7 +403,7 @@ export default function Register() {
               <form onSubmit={handleVerifyCode} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kod weryfikacyjny
+                    {isExistingUser ? 'Kod autoryzacyjny' : 'Kod weryfikacyjny'}
                   </label>
                   <input
                     type="text"
@@ -311,7 +421,7 @@ export default function Register() {
                   disabled={loading}
                   className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
                 >
-                  {loading ? 'Weryfikacja...' : 'Zweryfikuj kod'}
+                  {loading ? 'Weryfikacja...' : isExistingUser ? 'Zaloguj się' : 'Zweryfikuj kod'}
                 </button>
 
                 <button
@@ -325,8 +435,8 @@ export default function Register() {
             </div>
           )}
 
-          {/* Krok 3: Dane użytkownika */}
-          {step === 3 && (
+          {/* Krok 3: Dane użytkownika - tylko dla nowych użytkowników */}
+          {step === 3 && !isExistingUser && (
             <div>
               <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Dane konta</h1>
@@ -400,20 +510,6 @@ export default function Register() {
                     />
                   </div>
                 )}
-
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email (opcjonalnie)
-                  </label>
-                  <input
-                    type="email"
-                    value={userData.email}
-                    onChange={(e) => updateUserData('email', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    disabled={loading}
-                  />
-                </div>
 
                 {/* Adres rozliczeniowy */}
                 <div>
@@ -559,14 +655,17 @@ export default function Register() {
             </div>
           )}
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => router.push('/login')}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              ← Powrót do logowania
-            </button>
-          </div>
+          {/* Link powrotu - tylko jeśli nie jesteśmy w kroku 3 */}
+          {!(step === 3 && !isExistingUser) && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => router.push('/login')}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                ← Powrót do logowania
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </Layout>
