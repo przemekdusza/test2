@@ -42,10 +42,13 @@ export default function Login() {
     setError('');
 
     try {
+      // Format numeru - dodaj +48 jeśli nie ma
+      const formattedPhone = phone.startsWith('+48') ? phone : `+48${phone.replace(/\s/g, '')}`;
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.trim() })
+        body: JSON.stringify({ phone: formattedPhone })
       });
 
       const data = await response.json();
@@ -73,6 +76,15 @@ export default function Login() {
     }
   };
 
+  const goToRegister = () => {
+    const returnTo = router.query.returnTo;
+    if (returnTo) {
+      router.push(`/register?returnTo=${returnTo}`);
+    } else {
+      router.push('/register');
+    }
+  };
+
   return (
     <Layout title="Logowanie - Sklep z Ręcznikami">
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -95,15 +107,20 @@ export default function Login() {
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                 Numer telefonu
               </label>
-              <input
-                type="tel"
-                id="phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+48123456789"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                disabled={loading}
-              />
+              <div className="flex">
+                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-500">
+                  +48
+                </span>
+                <input
+                  type="tel"
+                  id="phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="123 456 789"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={loading}
+                />
+              </div>
             </div>
 
             <button
@@ -114,6 +131,16 @@ export default function Login() {
               {loading ? 'Logowanie...' : 'Zaloguj się'}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-gray-600 mb-4">Nie masz konta?</p>
+            <button
+              onClick={goToRegister}
+              className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 font-medium"
+            >
+              Zarejestruj się
+            </button>
+          </div>
 
           <div className="mt-6">
             <button
