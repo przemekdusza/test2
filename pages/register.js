@@ -595,10 +595,11 @@ export default function Register() {
                           <input
                             type="text"
                             value={userData.shippingAddress.postalCode}
-                            onChange={(e) => updateAddress('shippingAddress', 'postalCode', e.target.value)}
+                            onChange={(e) => handlePostalCodeChange('shippingAddress', e.target.value)}
                             placeholder="00-000"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             disabled={loading}
+                            maxLength={6}
                           />
                         </div>
                         <div>

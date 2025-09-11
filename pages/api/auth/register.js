@@ -20,6 +20,7 @@ export default async function handler(req, res) {
         last_name, 
         customer_type, 
         company_name, 
+        nip,
         billing_address, 
         shipping_address 
       } = req.body
@@ -39,13 +40,14 @@ export default async function handler(req, res) {
 
       console.log('Creating new user')
 
-      // Stwórz nowego użytkownika (bez email)
+      // Stwórz nowego użytkownika (z NIP dla firm)
       const newUser = await db.createUser({
         phone,
         first_name,
         last_name,
         customer_type: customer_type || 'private',
         company_name: customer_type === 'business' ? company_name : null,
+        nip: customer_type === 'business' ? nip : null,
         billing_address: JSON.stringify(billing_address),
         shipping_address: JSON.stringify(shipping_address)
       })
