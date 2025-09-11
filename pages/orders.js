@@ -1,273 +1,182 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import Layout from '../components/Layout';
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+import Layout from '../components/Layout'
 
 export default function Orders() {
-  const [orders, setOrders] = useState([]);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [user, setUser] = useState(null)
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
-    loadUserAndOrders();
-  }, []);
-
-  const loadUserAndOrders = async () => {
     // Sprawdź czy użytkownik jest zalogowany
-    const savedUser = localStorage.getItem('user');
-    if (!savedUser) {
-      router.push('/login');
-      return;
+    const userData = localStorage.getItem('user')
+    if (!userData) {
+      router.push('/login')
+      return
     }
 
-    try {
-      const userData = JSON.parse(savedUser);
-      setUser(userData);
-      
-      // Załaduj zamówienia użytkownika
-      await fetchUserOrders(userData.id);
-    } catch (e) {
-      router.push('/login');
-    }
-  };
+    const parsedUser = JSON.parse(userData)
+    setUser(parsedUser)
+
+    // Pobierz zamówienia użytkownika
+    fetchUserOrders(parsedUser.id)
+  }, [])
 
   const fetchUserOrders = async (userId) => {
     try {
-      const response = await fetch(`/api/orders/user/${userId}`);
+      const response = await fetch(`/api/orders?userId=${userId}`)
       if (response.ok) {
-        const ordersData = await response.json();
-        setOrders(ordersData);
+        const userOrders = await response.json()
+        setOrders(userOrders)
       } else {
-        // Jeśli API nie działa, użyj danych z localStorage
-        loadOrdersFromStorage();
+        console.error('Failed to fetch orders')
+        setOrders([]) // Pusta lista jeśli błąd
       }
     } catch (error) {
-      console.error('Błąd ładowania zamówień:', error);
-      loadOrdersFromStorage();
+      console.error('Error fetching orders:', error)
+      setOrders([]) // Pusta lista jeśli błąd
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  const loadOrdersFromStorage = () => {
-    // Fallback - załaduj zamówienia z localStorage
-    const savedOrders = localStorage.getItem('userOrders');
-    if (savedOrders) {
-      try {
-        const ordersData = JSON.parse(savedOrders);
-        setOrders(ordersData.filter(order => order.userId === user?.id));
-      } catch (e) {
-        setOrders([]);
-      }
-    }
-    setLoading(false);
-  };
-
-  const downloadInvoice = async (orderId) => {
-    try {
-      const response = await fetch(`/api/orders/invoice/${orderId}`);
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `faktura-${orderId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } else {
-        alert('Błąd pobierania faktury');
-      }
-    } catch (error) {
-      console.error('Błąd pobierania faktury:', error);
-      alert('Błąd pobierania faktury');
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Oczekujące' },
-      paid: { bg: 'bg-green-100', text: 'text-green-800', label: 'Opłacone' },
-      shipped: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Wysłane' },
-      delivered: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Dostarczone' },
-      cancelled: { bg: 'bg-red-100', text: 'text-red-800', label: 'Anulowane' }
-    };
-    
-    const config = statusConfig[status] || statusConfig.pending;
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-        {config.label}
-      </span>
-    );
-  };
+  }
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('pl-PL', {
-      year: 'numeric',
-      month: 'long',
       day: 'numeric',
+      month: 'long',
+      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    });
-  };
+    })
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'delivered': return 'text-green-600'
+      case 'shipped': return 'text-blue-600'
+      case 'pending': return 'text-yellow-600'
+      case 'cancelled': return 'text-red-600'
+      default: return 'text-gray-600'
+    }
+  }
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'delivered': return 'Dostarczone'
+      case 'shipped': return 'Wysłane'
+      case 'pending': return 'Oczekuje'
+      case 'cancelled': return 'Anulowane'
+      default: return 'Nieznany'
+    }
+  }
 
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center min-h-64">
-          <div className="text-xl">Ładowanie zamówień...</div>
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="text-center">Ładowanie zamówień...</div>
         </div>
       </Layout>
-    );
+    )
   }
 
   return (
-    <Layout title="Historia zamówień - Sklep z Ręcznikami">
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                  Historia zamówień
-                </h1>
-                <p className="text-gray-600">
-                  Twoje zamówienia i faktury
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">Zalogowany jako:</p>
-                <p className="font-semibold">{user?.firstName} {user?.lastName}</p>
-              </div>
-            </div>
+    <Layout>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Historia zamówień</h1>
+            <p className="text-gray-600 mt-2">Twoje zamówienia i faktury</p>
           </div>
-
-          {/* Lista zamówień */}
-          {orders.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-              <div className="text-gray-400 text-6xl mb-4">📦</div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">
-                Brak zamówień
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Nie masz jeszcze żadnych zamówień w historii.
-              </p>
-              <button
-                onClick={() => router.push('/')}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Przejdź do sklepu
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {orders.map(order => (
-                <div key={order.id} className="bg-white rounded-lg shadow-lg p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800">
-                        Zamówienie #{order.orderNumber}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(order.createdAt)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      {getStatusBadge(order.status)}
-                      <div className="text-lg font-bold text-blue-600 mt-1">
-                        {order.totalAmount.toFixed(2)} zł
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Produkty w zamówieniu */}
-                  <div className="border-t border-gray-100 pt-4 mb-4">
-                    <h4 className="font-semibold text-gray-700 mb-3">Produkty:</h4>
-                    <div className="space-y-2">
-                      {order.items.map(item => (
-                        <div key={item.id} className="flex justify-between items-center text-sm">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-lg">🧻</span>
-                            <div>
-                              <span className="font-medium">{item.name}</span>
-                              <span className="text-gray-500 ml-2">x{item.quantity}</span>
-                            </div>
-                          </div>
-                          <span className="font-medium">
-                            {(item.price * item.quantity).toFixed(2)} zł
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Akcje */}
-                  <div className="flex space-x-3 pt-4 border-t border-gray-100">
-                    <button
-                      onClick={() => downloadInvoice(order.id)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
-                    >
-                      📄 Pobierz fakturę
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        // Dodaj produkty z zamówienia do koszyka
-                        const currentCart = JSON.parse(localStorage.getItem('cart') || '[]');
-                        order.items.forEach(item => {
-                          const existingItem = currentCart.find(cartItem => cartItem.id === item.id);
-                          if (existingItem) {
-                            existingItem.quantity += item.quantity;
-                          } else {
-                            currentCart.push({
-                              id: item.id,
-                              name: item.name,
-                              price: item.price,
-                              description: item.description || '',
-                              quantity: item.quantity
-                            });
-                          }
-                        });
-                        localStorage.setItem('cart', JSON.stringify(currentCart));
-                        router.push('/');
-                      }}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                    >
-                      🛒 Zamów ponownie
-                    </button>
-
-                    {order.status === 'pending' && (
-                      <button
-                        onClick={() => {
-                          if (confirm('Czy na pewno chcesz anulować to zamówienie?')) {
-                            // Tutaj API do anulowania zamówienia
-                            alert('Funkcja anulowania zostanie dodana');
-                          }
-                        }}
-                        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
-                      >
-                        ❌ Anuluj
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {user && (
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Zalogowany jako:</p>
+              <p className="font-medium">{user.first_name} {user.last_name}</p>
             </div>
           )}
+        </div>
 
-          {/* Powrót */}
-          <div className="mt-8 text-center">
+        {orders.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+            <div className="text-gray-400 mb-4">
+              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Brak zamówień</h3>
+            <p className="text-gray-500 mb-6">Nie masz jeszcze żadnych zamówień.</p>
             <button
               onClick={() => router.push('/')}
-              className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors"
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
-              ← Powrót do sklepu
+              Przejdź do sklepu
             </button>
           </div>
+        ) : (
+          <div className="space-y-6">
+            {orders.map((order) => (
+              <div key={order.id} className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Zamówienie #{order.order_number}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {formatDate(order.created_at)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`font-medium ${getStatusColor(order.status)}`}>
+                      {getStatusText(order.status)}
+                    </span>
+                    <p className="text-xl font-bold text-gray-900 mt-1">
+                      {order.total_amount} zł
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Produkty:</h4>
+                  {order.order_items && order.order_items.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center py-2">
+                      <div className="flex items-center">
+                        <span className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-sm font-medium text-gray-600 mr-3">
+                          {item.quantity}
+                        </span>
+                        <span className="text-gray-900">
+                          {item.products ? item.products.name : `Produkt ID: ${item.product_id}`}
+                        </span>
+                      </div>
+                      <span className="font-medium text-gray-900">
+                        {(item.unit_price * item.quantity).toFixed(2)} zł
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 mt-4 pt-4 border-t">
+                  <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    📄 Pobierz fakturę
+                  </button>
+                  <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    🔄 Zamów ponownie
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => router.push('/')}
+            className="text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            ← Powrót do sklepu
+          </button>
         </div>
       </div>
     </Layout>
-  );
+  )
 }
